@@ -194,6 +194,7 @@ Authenticated real LLM inference demo:
 - Prints generated text for the given prompt when auth/model access is valid
 - Prints verbose diagnostics (token source, attempted models/endpoints, error previews) when inference fails
 - Uses default model `meta-llama/Llama-3.1-8B-Instruct`
+- Supports custom prompt via `HF_PROMPT` or `--prompt`
 
 Create a token here: https://huggingface.co/settings/tokens
 
@@ -202,6 +203,20 @@ Run with:
 ```bash
 export HF_TOKEN=hf_xxx
 make run-hf-llm
+```
+
+Or with a custom prompt:
+
+```bash
+HF_PROMPT="Explain sandboxing in one sentence." make run-hf-llm
+```
+
+Or directly via script args:
+
+```bash
+PYTHONPATH=src .venv/bin/python examples/hf_llm_example.py \
+	--model "meta-llama/Llama-3.1-8B-Instruct" \
+	--prompt "Explain sandboxing in one sentence."
 ```
 
 Optional model override:
@@ -214,6 +229,12 @@ Also supported:
 - `HUGGINGFACEHUB_API_TOKEN`
 - `HUGGING_FACE_HUB_TOKEN`
 - `.env.local` or `.env` containing `HF_TOKEN=hf_xxx`
+
+Tip: start from the committed template:
+
+```bash
+cp .env.example .env.local
+```
 
 Shared helpers:
 - [`src/sandbox_examples/shared_tools.py`](src/sandbox_examples/shared_tools.py)

@@ -1,5 +1,6 @@
 import json
 import os
+import argparse
 
 from _common import build_sandbox, run_guest_code
 
@@ -8,14 +9,16 @@ from sandbox_examples.shared_tools import utc_now_iso
 
 
 DEFAULT_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+DEFAULT_PROMPT = "Write one concise sentence about running untrusted code safely."
 
 
-def build_guest_code(model):
+def build_guest_code(model, prompt):
     model_literal = json.dumps(model)
+    prompt_literal = json.dumps(prompt)
     return f"""
     print('== Hugging Face Real LLM Call Example ==')
 
-    prompt = 'Write one concise sentence about running untrusted code safely.'
+    prompt = {prompt_literal}
     model = {model_literal}
 
     stamp = call_tool('utc_now_iso')
@@ -61,8 +64,23 @@ def build_guest_code(model):
     """
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the Hugging Face LLM sandbox example")
+    parser.add_argument(
+        "--model",
+        default=os.getenv("HF_MODEL", DEFAULT_MODEL),
+        help="Model id to request from Hugging Face router (default: HF_MODEL or built-in default)",
+    )
+    parser.add_argument(
+        "--prompt",
+        default=os.getenv("HF_PROMPT", DEFAULT_PROMPT),
+        help="Prompt text to send for generation (default: HF_PROMPT or built-in default)",
+    )
+    return parser.parse_args()
+
+
 def main():
-    selected_model = os.getenv("HF_MODEL", DEFAULT_MODEL)
+    args = parse_args()
     sandbox = build_sandbox(
         tools=[
             ("utc_now_iso", utc_now_iso),
@@ -70,7 +88,7 @@ def main():
         ],
         domains=["https://huggingface.co"],
     )
-    run_guest_code(sandbox, build_guest_code(selected_model))
+    run_guest_code(sandbox, build_guest_code(args.model, args.prompt))
 
 
 if __name__ == "__main__":
