@@ -1,0 +1,84 @@
+name: Upstream Watch
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Detect upstream release changes
+        id: upstream
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+
+            const statePath = '.github/upstream-watch.json';
+            const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+
+            const latest = await github.rest.repos.getLatestRelease({
+              owner: 'hyperlight-dev',
+              repo: 'hyperlight-sandbox',
+            });
+
+            const latestTag = latest.data.tag_name;
+            const trackedTag = state.tracked_release_tag;
+            const hasUpdate = latestTag !== trackedTag;
+
+            core.setOutput('has_update', hasUpdate ? 'true' : 'false');
+            core.setOutput('latest_tag', latestTag);
+            core.setOutput('latest_name', latest.data.name || latestTag);
+            core.setOutput('latest_url', latest.data.html_url);
+            core.setOutput('latest_published_at', latest.data.published_at || '');
+            core.setOutput('tracked_tag', trackedTag || '');
+
+            if (!hasUpdate) {
+              core.info(`No upstream update. Still tracking ${trackedTag}.`);
+              return;
+            }
+
+            const nextState = {
+              upstream_repo: state.upstream_repo,
+              tracked_release_tag: latestTag,
+              tracked_release_name: latest.data.name || latestTag,
+              tracked_release_url: latest.data.html_url,
+              tracked_published_at: latest.data.published_at || '',
+            };
+
+            fs.writeFileSync(statePath, JSON.stringify(nextState, null, 2) + '\n');
+            core.info(`Upstream update found: ${trackedTag} -> ${latestTag}`);
+
+      - name: Create upstream update PR
+        if: steps.upstream.outputs.has_update == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: track upstream hyperlight-sandbox ${{ steps.upstream.outputs.latest_tag }}"
+          title: "chore: track upstream hyperlight-sandbox ${{ steps.upstream.outputs.latest_tag }}"
+          body: |
+            Upstream Hyperlight Sandbox release update detected.
+
+            - Previous tracked release: `${{ steps.upstream.outputs.tracked_tag }}`
+            - New upstream release: `${{ steps.upstream.outputs.latest_tag }}`
+            - Release page: ${{ steps.upstream.outputs.latest_url }}
+
+            This PR updates `.github/upstream-watch.json` so the repository stays in sync with the latest observed upstream release.
+          branch: "bot/upstream-watch-${{ steps.upstream.outputs.latest_tag }}"
+          delete-branch: true
+          labels: |
+            dependencies
+            upstream
+
+      - name: No update found
+        if: steps.upstream.outputs.has_update != 'true'
+        run: echo "No new upstream release detected."

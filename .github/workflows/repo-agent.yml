@@ -1,0 +1,137 @@
+name: Repo Agent
+
+on:
+  issue_comment:
+    types:
+      - created
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Agent command: help, status, or upstream-status"
+        required: true
+        default: "status"
+      issue_number:
+        description: "Optional issue or PR number to reply to"
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  agent:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.comment.body, '/agent')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Handle agent command
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const isDispatch = context.eventName === 'workflow_dispatch';
+            const rawInput = isDispatch
+              ? (core.getInput('command') || 'status')
+              : (context.payload.comment?.body || '');
+
+            const normalized = rawInput.trim();
+            let command = 'help';
+
+            if (normalized.startsWith('/agent')) {
+              const parts = normalized.split(/\s+/).slice(1);
+              command = (parts[0] || 'help').toLowerCase();
+            } else {
+              command = normalized.toLowerCase();
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = isDispatch
+              ? Number(core.getInput('issue_number') || 0)
+              : context.issue.number;
+
+            const postMessage = async (body) => {
+              if (issueNumber) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body,
+                });
+              }
+              core.summary.addRaw(body).write();
+            };
+
+            if (command === 'help') {
+              await postMessage([
+                'GitHub repo agent commands:',
+                '',
+                '- `/agent help`: show available commands',
+                '- `/agent status`: show repo health summary',
+                '- `/agent upstream-status`: compare tracked upstream release with the current upstream latest release',
+                '',
+                'You can also run this workflow manually from Actions using `workflow_dispatch`.',
+              ].join('\n'));
+              return;
+            }
+
+            if (command === 'upstream-status') {
+              const fs = require('fs');
+              const tracked = JSON.parse(fs.readFileSync('.github/upstream-watch.json', 'utf8'));
+              const latest = await github.rest.repos.getLatestRelease({
+                owner: 'hyperlight-dev',
+                repo: 'hyperlight-sandbox',
+              });
+
+              const trackedTag = tracked.tracked_release_tag;
+              const latestTag = latest.data.tag_name;
+              const isCurrent = trackedTag === latestTag;
+
+              await postMessage([
+                'Upstream status:',
+                '',
+                `- Tracked release: ${trackedTag}`,
+                `- Latest upstream release: ${latestTag}`,
+                `- Release page: ${latest.data.html_url}`,
+                `- Up to date: ${isCurrent ? 'yes' : 'no'}`,
+              ].join('\n'));
+              return;
+            }
+
+            if (command !== 'status') {
+              await postMessage(`Unknown agent command: \`${command}\`. Try \`/agent help\`.`);
+              return;
+            }
+
+            const [repoInfo, issues, pulls, workflows, runs] = await Promise.all([
+              github.rest.repos.get({ owner, repo }),
+              github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 }),
+              github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 }),
+              github.rest.actions.listRepoWorkflows({ owner, repo, per_page: 100 }),
+              github.rest.actions.listWorkflowRunsForRepo({ owner, repo, per_page: 10 }),
+            ]);
+
+            const openIssues = issues.data.filter((item) => !item.pull_request).length;
+            const openPulls = pulls.data.length;
+            const latestRuns = runs.data.workflow_runs.slice(0, 5).map((run) => {
+              const outcome = run.conclusion || run.status;
+              return `- ${run.name}: ${outcome} (${run.head_branch})`;
+            });
+
+            const message = [
+              `Repo status for ${repoInfo.data.full_name}:`,
+              '',
+              `- Default branch: ${repoInfo.data.default_branch}`,
+              `- Open issues: ${openIssues}`,
+              `- Open pull requests: ${openPulls}`,
+              `- Workflows configured: ${workflows.data.total_count}`,
+              `- Auto-merge enabled: ${repoInfo.data.allow_auto_merge ? 'yes' : 'no'}`,
+              '',
+              'Latest workflow runs:',
+              ...latestRuns,
+            ].join('\n');
+
+            await postMessage(message);

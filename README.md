@@ -247,8 +247,46 @@ This repository includes GitHub automation for both CI and dependency maintenanc
 - CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Validates Python syntax in `examples/` and `src/`, byte-compiles every file, imports all modules, and runs helper smoke checks. It does not execute KVM-backed runtime examples on GitHub-hosted runners.
 - Dependabot config: [`.github/dependabot.yml`](.github/dependabot.yml). Checks GitHub Actions dependencies weekly, groups those updates into a single PR, and applies dependency labels.
 - Dependabot automation: [`.github/workflows/auto-approve-dependabot.yml`](.github/workflows/auto-approve-dependabot.yml). Approves Dependabot PRs after `CI` succeeds and enables auto-merge when repository policy allows it.
+- Repo agent: [`.github/workflows/repo-agent.yml`](.github/workflows/repo-agent.yml). Responds to `/agent help` and `/agent status` on issues and pull requests, and can also be run manually from the Actions tab.
+- Upstream watcher: [`.github/workflows/upstream-watch.yml`](.github/workflows/upstream-watch.yml). Checks `hyperlight-dev/hyperlight-sandbox` daily or on manual trigger and opens a PR when a new upstream release is detected.
 
 Repository auto-merge is enabled so the Dependabot workflow can turn on auto-merge after approval.
+
+Main branch protection is enabled with required pull requests, one approving review, conversation resolution, and the `python-validate` status check. Admin enforcement is disabled, so repository admins can still override when needed.
+
+Repo agent commands:
+- `/agent help`
+- `/agent status`
+- `/agent upstream-status`
+
+Tracked upstream state:
+- [`.github/upstream-watch.json`](.github/upstream-watch.json)
+
+## Manage Agents (GitHub)
+
+This repository is configured for GitHub Copilot cloud agent with custom agent profiles:
+
+- [`.github/agents/upstream-sync.agent.md`](.github/agents/upstream-sync.agent.md): upstream release tracking and sync-oriented maintenance.
+- [`.github/agents/repo-maintainer.agent.md`](.github/agents/repo-maintainer.agent.md): CI/workflow/docs maintenance.
+
+Use these with the new GitHub agents flow:
+
+1. Open `https://github.com/copilot/agents` and choose this repository.
+2. Create a task prompt and select one of the custom agents from the agent picker.
+3. Optionally choose a base branch before starting the task.
+4. Review the draft PR and request follow-up changes by commenting with `@copilot`.
+
+CLI flow (GitHub CLI 2.80.0+):
+
+```bash
+gh agent-task create "Update upstream watch metadata and docs" --repo OWNER/REPO --follow
+gh agent-task list --repo OWNER/REPO
+gh agent-task view --repo OWNER/REPO <SESSION_OR_PR_NUMBER> --log --follow
+```
+
+Notes:
+- `@copilot` comments on a Copilot-created PR keep the same custom agent context.
+- Actions workflows on Copilot PRs may require explicit "Approve and run workflows" depending on your repository settings.
 
 ## What it does
 
