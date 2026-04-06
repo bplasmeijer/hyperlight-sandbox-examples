@@ -1,0 +1,11 @@
+[project]
+name = "hyperlight-sandbox-examples"
+version = "0.1.0"
+description = "Example programs for the Hyperlight Sandbox Python SDK"
+requires-python = ">=3.12"
+dependencies = [
+    "hyperlight-sandbox[wasm,python-guest]",
+]
+
+[tool.uv]
+package = false
