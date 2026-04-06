@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create virtual environment
+        run: uv venv --python 3.12
+
+      - name: Install runtime dependencies
+        run: uv pip install "hyperlight-sandbox[wasm,python-guest]"
+
+      - name: Compile Python sources
+        run: PYTHONPATH=src .venv/bin/python -m compileall examples src
+
+      - name: Byte-compile each Python file
+        run: |
+          PYTHONPATH=src .venv/bin/python - <<'PY'
+          import pathlib
+          import py_compile
+
+          for root in (pathlib.Path("examples"), pathlib.Path("src")):
+              for path in sorted(root.rglob("*.py")):
+                  py_compile.compile(str(path), doraise=True)
+                  print(f"compiled {path}")
+          PY
+
+      - name: Import all example and source modules
+        run: |
+          PYTHONPATH=examples:src .venv/bin/python - <<'PY'
+          import importlib
+          import pathlib
+
+          modules = []
+
+          for path in sorted(pathlib.Path("examples").glob("*.py")):
+              if path.name.startswith("_"):
+                  continue
+              modules.append(path.stem)
+
+          for path in sorted(pathlib.Path("src").rglob("*.py")):
+              relative = path.relative_to("src").with_suffix("")
+              modules.append(".".join(relative.parts))
+
+          for module_name in modules:
+              importlib.import_module(module_name)
+              print(f"imported {module_name}")
+          PY
+
+      - name: Smoke-check helper behavior
+        run: |
+          PYTHONPATH=src .venv/bin/python - <<'PY'
+          from sandbox_examples.hf_tools import hf_generate_text
+          from sandbox_examples.shared_tools import (
+              calc_line_total,
+              discount_for_coupon,
+              shipping_for_weight_kg,
+              utc_now_iso,
+          )
+
+          assert callable(hf_generate_text)
+          assert calc_line_total(10, 2, 0.1)["total"] == 22.0
+          assert discount_for_coupon("VIP15") == 0.15
+          assert shipping_for_weight_kg(0.25) == 3.5
+          assert isinstance(utc_now_iso(), str)
+          print("Helper smoke checks passed")
+          PY
+
+      - name: Explain hosted-runner limitation
+        run: |
+          echo "Sandbox runtime examples are not executed in CI because GitHub-hosted runners do not provide /dev/kvm."
+          echo "This workflow validates syntax, imports, and helper behavior only."
