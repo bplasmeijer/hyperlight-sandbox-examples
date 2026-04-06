@@ -23,36 +23,18 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - name: Create virtual environment
-        run: uv venv --python 3.12
-
-      - name: Install runtime dependencies
-        run: uv pip install "hyperlight-sandbox[wasm,python-guest]"
+      - name: Install dependencies
+        run: uv sync
 
       - name: Compile Python sources
-        run: PYTHONPATH=src .venv/bin/python -m compileall examples src
-
-      - name: Byte-compile each Python file
-        run: |
-          PYTHONPATH=src .venv/bin/python - <<'PY'
-          import pathlib
-          import py_compile
-
-          for root in (pathlib.Path("examples"), pathlib.Path("src")):
-              for path in sorted(root.rglob("*.py")):
-                  py_compile.compile(str(path), doraise=True)
-                  print(f"compiled {path}")
-          PY
+        run: PYTHONPATH=src uv run python -m compileall examples src
 
       - name: Import all example and source modules
         run: |
-          PYTHONPATH=examples:src .venv/bin/python - <<'PY'
+          PYTHONPATH=examples:src uv run python - <<'PY'
           import importlib
           import pathlib
 
@@ -74,7 +56,7 @@ jobs:
 
       - name: Smoke-check helper behavior
         run: |
-          PYTHONPATH=src .venv/bin/python - <<'PY'
+          PYTHONPATH=src uv run python - <<'PY'
           from sandbox_examples.hf_tools import hf_generate_text
           from sandbox_examples.shared_tools import (
               calc_line_total,
@@ -90,8 +72,3 @@ jobs:
           assert isinstance(utc_now_iso(), str)
           print("Helper smoke checks passed")
           PY
-
-      - name: Explain hosted-runner limitation
-        run: |
-          echo "Sandbox runtime examples are not executed in CI because GitHub-hosted runners do not provide /dev/kvm."
-          echo "This workflow validates syntax, imports, and helper behavior only."

@@ -79,8 +79,12 @@ jobs:
             }
 
             if (command === 'upstream-status') {
-              const fs = require('fs');
-              const tracked = JSON.parse(fs.readFileSync('.github/upstream-watch.json', 'utf8'));
+              const { data: fileData } = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: '.github/upstream-watch.json',
+              });
+              const tracked = JSON.parse(Buffer.from(fileData.content, 'base64').toString('utf8'));
               const latest = await github.rest.repos.getLatestRelease({
                 owner: 'hyperlight-dev',
                 repo: 'hyperlight-sandbox',

@@ -19,11 +19,15 @@ updates:
 
     # Enable this block when the repository has a supported Python manifest,
     # such as pyproject.toml, requirements.txt, or requirements-dev.txt.
-    # - package-ecosystem: "pip"
-    #   directory: "/"
-    #   schedule:
-    #     interval: "weekly"
-    #   commit-message:
-    #     prefix: "chore"
-    #     include: "scope"
-    #   open-pull-requests-limit: 5
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "pip"
+      - "dependabot"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    open-pull-requests-limit: 5
