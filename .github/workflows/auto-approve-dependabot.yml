@@ -1,0 +1,102 @@
+name: Dependabot Automation
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  approve-and-automerge:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Approve and enable auto-merge for successful Dependabot PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = context.payload.workflow_run.pull_requests || [];
+
+            if (prs.length === 0) {
+              core.info('No pull requests were associated with this workflow run.');
+              return;
+            }
+
+            for (const prRef of prs) {
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prRef.number,
+              });
+
+              const isDependabot =
+                pr.user?.login === 'dependabot[bot]' ||
+                (pr.head?.ref || '').startsWith('dependabot/');
+
+              if (!isDependabot) {
+                core.info(`Skipping PR #${pr.number}: not opened by Dependabot.`);
+                continue;
+              }
+
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+              });
+
+              const alreadyApproved = reviews.some(
+                (review) =>
+                  review.user?.login === 'github-actions[bot]' &&
+                  review.state === 'APPROVED'
+              );
+
+              if (alreadyApproved) {
+                core.info(`PR #${pr.number} is already approved by github-actions[bot].`);
+              } else {
+                await github.rest.pulls.createReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  event: 'APPROVE',
+                  body: 'Auto-approved after the CI workflow completed successfully for this Dependabot update.',
+                });
+
+                core.info(`Approved Dependabot PR #${pr.number}.`);
+              }
+
+              if (pr.auto_merge) {
+                core.info(`PR #${pr.number} already has auto-merge enabled.`);
+                continue;
+              }
+
+              try {
+                await github.graphql(
+                  `mutation EnableAutoMerge($pullRequestId: ID!) {
+                    enablePullRequestAutoMerge(input: {
+                      pullRequestId: $pullRequestId,
+                      mergeMethod: SQUASH
+                    }) {
+                      pullRequest {
+                        number
+                        autoMergeRequest {
+                          enabledAt
+                        }
+                      }
+                    }
+                  }`,
+                  {
+                    pullRequestId: pr.node_id,
+                  }
+                );
+
+                core.info(`Enabled auto-merge for Dependabot PR #${pr.number}.`);
+              } catch (error) {
+                core.warning(`Could not enable auto-merge for PR #${pr.number}: ${error.message}`);
+              }
+            }

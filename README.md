@@ -240,6 +240,16 @@ Shared helpers:
 - [`src/sandbox_examples/shared_tools.py`](src/sandbox_examples/shared_tools.py)
 - [`src/sandbox_examples/hf_tools.py`](src/sandbox_examples/hf_tools.py)
 
+## Automation
+
+This repository includes GitHub automation for both CI and dependency maintenance.
+
+- CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Validates Python syntax in `examples/` and `src/`, byte-compiles every file, imports all modules, and runs helper smoke checks. It does not execute KVM-backed runtime examples on GitHub-hosted runners.
+- Dependabot config: [`.github/dependabot.yml`](.github/dependabot.yml). Checks GitHub Actions dependencies weekly, groups those updates into a single PR, and applies dependency labels.
+- Dependabot automation: [`.github/workflows/auto-approve-dependabot.yml`](.github/workflows/auto-approve-dependabot.yml). Approves Dependabot PRs after `CI` succeeds and enables auto-merge when repository policy allows it.
+
+Repository auto-merge is enabled so the Dependabot workflow can turn on auto-merge after approval.
+
 ## What it does
 
 `examples/quickstart.py` creates a Wasm-backed Python sandbox, registers a host `add` tool, allows outbound HTTP to `httpbin.org`, then runs untrusted code inside the micro-VM that calls both.
